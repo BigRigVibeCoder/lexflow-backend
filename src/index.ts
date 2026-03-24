@@ -39,7 +39,7 @@ async function main(): Promise<void> {
   const pool = databaseUrl ? createPool(databaseUrl) : null;
 
   if (!databaseUrl) {
-    /* eslint-disable-next-line no-console -- Startup warning before logger is available */
+    /* eslint-disable-next-line no-console -- GOV-003-exempt: startup warning before pino logger exists */
     console.warn(
       'WARNING: DATABASE_URL not set. Trust Service starting without database connectivity.',
     );
@@ -67,7 +67,7 @@ async function main(): Promise<void> {
  * REF: GOV-004 §4.2
  */
 process.on('uncaughtException', (error: Error) => {
-  /* eslint-disable-next-line no-console -- Last-resort logging */
+  /* eslint-disable-next-line no-console -- GOV-003-exempt: last-resort crash logging, pino unavailable */
   console.error('FATAL: Uncaught exception — process will exit', {
     error: error.message,
     stack: error.stack,
@@ -81,7 +81,7 @@ process.on('uncaughtException', (error: Error) => {
  * REF: GOV-004 §4.2
  */
 process.on('unhandledRejection', (reason: unknown) => {
-  /* eslint-disable-next-line no-console -- Last-resort logging */
+  /* eslint-disable-next-line no-console -- GOV-003-exempt: last-resort crash logging, pino unavailable */
   console.error('FATAL: Unhandled promise rejection — process will exit', {
     reason,
   });

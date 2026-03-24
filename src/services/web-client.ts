@@ -81,7 +81,11 @@ export class WebClientService {
       clearTimeout(timeout);
 
       if (!response.ok) {
-        throw new Error(`Web service returned ${String(response.status)}`);
+        throw new ApplicationError(
+          `Web service returned ${String(response.status)}`,
+          'INTERNAL_ERROR',
+          { category: ErrorCategory.EXTERNAL_SERVICE, operation: 'validate-matter-client' },
+        );
       }
 
       const result = await response.json() as ValidateMatterClientResult;
