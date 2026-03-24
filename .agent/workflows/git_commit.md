@@ -133,8 +133,8 @@ echo "Current branch: $BRANCH"
 ```
 
 - If on `main` → STOP unless you are the Architect Agent committing governance docs.
-- Developer agents MUST be on a branch matching `feature/SPR-NNN-TXXX-*`.
-- If the branch name doesn't match the pattern, rename it before committing.
+- Developer agents MUST be on a branch matching `feature/SPR-NNN-*` (one branch per sprint — GOV-005 §5.1).
+- Do NOT create per-task branches (e.g., `feature/SPR-004-T034-*`). Use one branch per sprint with granular commits.
 
 **CODEX submodule freshness (GOV-008):**
 
