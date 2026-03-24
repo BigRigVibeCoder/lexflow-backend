@@ -72,19 +72,46 @@ Verify NONE of these patterns appear in the changelist:
 | `strace.out`, `startup_trace.log` | Debug traces |
 | `.env`, `*.pem`, `*.key`, `*secret*`, `*credential*` | **Secrets / credentials** |
 
-### 2b. Secret & Credential Scan
+### 2b. Secret & Credential Scan — BLOCKING
 
-Before any commit, check for accidentally exposed secrets:
+> [!CAUTION]
+> This gate BLOCKS the commit if secrets are detected. No exceptions.
+
+Before any commit, scan staged files for exposed secrets:
 
 ```bash
-# Quick scan for common secret patterns in staged files
-git diff --cached --name-only | xargs grep -l -i -E '(api[_-]?key|password|secret|token|credential|private[_-]?key)' 2>/dev/null
+# Scan staged files for secret patterns
+SECRET_HITS=$(git diff --cached --name-only | xargs grep -l -i -E \
+  '(api[_-]?key|password|secret[_-]?key|private[_-]?key|credential)[[:space:]]*[=:][[:space:]]*["\x27]' \
+  2>/dev/null || true)
+
+# Also scan for known secret formats (API keys, tokens, PEM blocks)
+FORMAT_HITS=$(git diff --cached -U0 | grep -E \
+  '^\+.*(sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{36}|gho_[a-zA-Z0-9]{36}|glpat-[a-zA-Z0-9]{20}|xox[bpas]-[a-zA-Z0-9-]{20,}|-----BEGIN (RSA |EC )?PRIVATE KEY-----)' \
+  2>/dev/null || true)
+
+if [ -n "$SECRET_HITS" ] || [ -n "$FORMAT_HITS" ]; then
+  echo "❌ SECRET LEAK DETECTED — commit BLOCKED"
+  [ -n "$SECRET_HITS" ] && echo "Files with secret patterns:" && echo "$SECRET_HITS" | sed 's/^/  /'
+  [ -n "$FORMAT_HITS" ] && echo "Staged diffs containing secret formats:" && echo "$FORMAT_HITS" | sed 's/^/  /'
+  echo ""
+  echo "Remove secrets and use environment variables instead."
+  echo "If false positive, verify manually and document in commit message."
+  exit 1
+fi
+echo "✅ No secrets detected"
 ```
 
-If any matches are found:
-- **STOP** — Do NOT commit.
-- Review each match. If it's a real secret → remove it and use environment variables.
-- If it's a false positive (e.g., a variable name, not a value) → proceed.
+**Common false positives** (OK to proceed after manual review):
+- Variable names like `apiKey` or `secretKey` with no value assigned
+- Documentation examples with placeholder values
+- Test fixtures with fake values like `test-secret-key`
+
+**Always blocked** (no override):
+- `.env` files with real values
+- `*.pem`, `*.key` files
+- `keys/` directory contents
+- Hardcoded passwords in scripts
 
 ### 2c. Test Artifact Check
 
