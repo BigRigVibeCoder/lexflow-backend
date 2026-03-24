@@ -22,7 +22,13 @@ import type pg from 'pg';
 
 import correlationIdPlugin from './plugins/correlation-id.js';
 import errorHandlerPlugin from './plugins/error-handler.js';
+import authPlugin from './plugins/auth.js';
 import healthRoute from './routes/health.js';
+import trustAccountRoutes from './routes/trust-accounts.js';
+import transactionRoutes from './routes/transactions.js';
+import transactionQueryRoutes from './routes/transaction-queries.js';
+import bankStatementRoutes from './routes/bank-statements.js';
+import reconciliationRoutes from './routes/reconciliation.js';
 
 /**
  * Augment Fastify instance with the PostgreSQL pool.
@@ -50,7 +56,13 @@ export interface ServerOptions {
  * Registers plugins in dependency order:
  * 1. correlation-id → generates/propagates request trace IDs
  * 2. error-handler → transforms errors into CON-002 responses
- * 3. health route → GET /health (no auth required)
+ * 3. auth → validates X-Internal-Service-Key (health exempt)
+ * 4. health route → GET /health (no auth required)
+ * 5. trust-accounts → CON-002 §2.1-2.5
+ * 6. transactions → CON-002 §3.1-3.5
+ * 7. transaction-queries → CON-002 §4.1-4.2
+ * 8. bank-statements → CON-002 §5.1
+ * 9. reconciliation → CON-002 §5.2-5.4
  *
  * PRECONDITION: pool may be null (health endpoint reports dbConnected=false).
  * POSTCONDITION: Returns a fully configured but NOT started Fastify instance.
@@ -85,7 +97,15 @@ export async function buildServer(options: ServerOptions) {
   /* Register plugins in dependency order */
   await server.register(correlationIdPlugin);
   await server.register(errorHandlerPlugin);
+  await server.register(authPlugin);
   await server.register(healthRoute);
+
+  /* Trust accounting routes (SPR-004) */
+  await server.register(trustAccountRoutes);
+  await server.register(transactionRoutes);
+  await server.register(transactionQueryRoutes);
+  await server.register(bankStatementRoutes);
+  await server.register(reconciliationRoutes);
 
   return server;
 }
