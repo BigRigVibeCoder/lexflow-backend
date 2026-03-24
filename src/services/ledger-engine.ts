@@ -770,18 +770,18 @@ export class LedgerEngine {
   }
 
   /** Add two decimal strings with 2-digit precision. */
-  private addDecimals(a: string, b: string): string {
+  addDecimals(a: string, b: string): string {
     const result = parseFloat(a) + parseFloat(b);
     return result.toFixed(2);
   }
 
   /** Negate a decimal string. */
-  private negateDecimal(value: string): string {
+  negateDecimal(value: string): string {
     return (parseFloat(value) * -1).toFixed(2);
   }
 
   /** Format a value as a 2-decimal string. */
-  private formatDecimal(value: string): string {
+  formatDecimal(value: string): string {
     return parseFloat(value).toFixed(2);
   }
 }
