@@ -135,6 +135,42 @@ fi
 - Do NOT use `--no-verify` to bypass test failures — fix the code.
 - If a test is flaky, document it in a `DEF-` report and fix the test, don't skip it.
 
+**Test coverage check (GOV-002) — CRITICAL:**
+
+> [!CAUTION]
+> "Existing tests pass" is NOT sufficient. New source files MUST have test files.
+
+For every new or modified `.ts` file in `src/`, verify a corresponding `.test.ts` file exists:
+
+```bash
+# Check that new/modified source files have corresponding test files
+MISSING_TESTS=""
+for src_file in $(git diff --cached --name-only --diff-filter=ACM | grep '^src/.*\.ts$' | grep -v '\.test\.' | grep -v '\.spec\.' | grep -v '\.d\.ts$'); do
+  test_file="${src_file%.ts}.test.ts"
+  if [ ! -f "$test_file" ]; then
+    MISSING_TESTS="${MISSING_TESTS}\n  ❌ ${src_file} → missing ${test_file}"
+  fi
+done
+
+if [ -n "$MISSING_TESTS" ]; then
+  echo "❌ TEST COVERAGE VIOLATION (GOV-002)"
+  echo "The following source files have no corresponding test file:"
+  echo -e "$MISSING_TESTS"
+  echo ""
+  echo "Every new source file MUST have a test file. This is not optional."
+  echo "STOP — write the tests before committing."
+  exit 1
+fi
+```
+
+**Exclusions** — these file types do NOT require test files:
+- `src/db/schema.ts` (schema definitions — tested via integration)
+- `src/**/index.ts` (barrel exports)
+- `src/**/*.d.ts` (type declarations)
+- Config files (`drizzle.config.ts`, `vitest.config.ts`)
+
+If a file genuinely doesn't need its own test file, the agent must explain why in the commit message body.
+
 ### 2e. Action for Junk
 
 | Found in... | Action |
