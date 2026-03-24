@@ -198,6 +198,23 @@ fi
 
 If a file genuinely doesn't need its own test file, the agent must explain why in the commit message body.
 
+**Governance scan (ALL 8 GOV docs) — BLOCKING:**
+
+> [!CAUTION]
+> This scan runs the `/governance_scan` workflow against all staged source files.
+> Any FAIL result blocks the commit. Fix violations before proceeding.
+
+Run the `/governance_scan` workflow now. It checks:
+- **GOV-001**: Exported functions have JSDoc/TSDoc, README exists
+- **GOV-003**: No `any` types, no `console.log` in source files, TypeScript strict mode
+- **GOV-004**: No raw `throw new Error()` — use `ApplicationError` or `TRPCError`
+- **GOV-006**: Route/router files import a logger
+- **GOV-008**: `.env.example` exists if `process.env` is used, all env vars documented
+
+Lines with `// GOV-NNN-exempt` comments are excluded from checks.
+
+If any check returns FAIL → STOP. Fix the violations before committing.
+
 ### 2e. Action for Junk
 
 | Found in... | Action |
