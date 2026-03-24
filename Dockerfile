@@ -32,9 +32,10 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Create non-root user
+# Create non-root user and install curl for health checks
 RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 fastify
+    adduser --system --uid 1001 fastify && \
+    apk add --no-cache curl
 
 # Copy production deps only
 COPY package.json package-lock.json ./
@@ -51,6 +52,6 @@ ENV PORT=4000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:4000/health || exit 1
+  CMD curl -f http://127.0.0.1:4000/health || exit 1
 
 CMD ["node", "dist/index.js"]
