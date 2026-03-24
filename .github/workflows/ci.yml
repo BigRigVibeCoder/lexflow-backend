@@ -1,0 +1,48 @@
+# ============================================================================
+# ci.yml — LexFlow Backend CI Pipeline
+# ============================================================================
+#
+# Triggers on PR to main and push to main.
+# Jobs: install → lint → typecheck → unit test
+#
+# REF: SPR-001 T-005V (CI Pipeline)
+# REF: GOV-003 §12.3 (Static analysis CI gate)
+# REF: GOV-002 (Testing Protocol)
+# ============================================================================
+
+name: CI — Trust Service
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    name: Lint, Typecheck & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Typecheck (TypeScript)
+        run: npm run typecheck
+
+      - name: Unit Tests (Vitest)
+        run: npm test
