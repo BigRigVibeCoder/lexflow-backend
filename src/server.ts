@@ -19,6 +19,9 @@
 
 import Fastify from 'fastify';
 import type pg from 'pg';
+import { createWriteStream } from 'fs';
+import { dirname } from 'path';
+import { mkdirSync } from 'fs';
 
 import correlationIdPlugin from './plugins/correlation-id.js';
 import errorHandlerPlugin from './plugins/error-handler.js';
@@ -51,6 +54,57 @@ export interface ServerOptions {
 }
 
 /**
+ * Build the pino logger configuration.
+ *
+ * If LOG_FILE env var is set, creates a multistream that writes JSONL
+ * to both stdout and the specified file. Ensures the target directory exists.
+ *
+ * @param logLevel - pino log level (trace, debug, info, warn, error, fatal)
+ * @returns Fastify-compatible logger configuration
+ *
+ * REF: GOV-006 §4 (Persistent logging, JSONL format)
+ * REF: SPR-008 T-088
+ */
+function buildLoggerConfig(logLevel: string): Record<string, unknown> {
+  const base: Record<string, unknown> = {
+    level: logLevel,
+    formatters: {
+      level: (label: string) => ({ level: label.toUpperCase() }),
+    },
+    timestamp: () => `,"timestamp":"${new Date().toISOString()}"`,
+    base: {
+      service: process.env['SERVICE_NAME'] ?? 'lexflow-trust',
+    },
+  };
+
+  const logFile = process.env['LOG_FILE'];
+
+  if (logFile) {
+    /* Ensure log directory exists */
+    try {
+      mkdirSync(dirname(logFile), { recursive: true });
+    } catch {
+      /* Directory may already exist — ignore EEXIST */
+    }
+
+    /* Create a file write stream for JSONL output */
+    const fileStream = createWriteStream(logFile, { flags: 'a' });
+
+    return {
+      ...base,
+      stream: {
+        write(msg: string) {
+          process.stdout.write(msg);
+          fileStream.write(msg);
+        },
+      },
+    };
+  }
+
+  return base;
+}
+
+/**
  * Build a configured Fastify server instance.
  *
  * Registers plugins in dependency order:
@@ -66,7 +120,7 @@ export interface ServerOptions {
  *
  * PRECONDITION: pool may be null (health endpoint reports dbConnected=false).
  * POSTCONDITION: Returns a fully configured but NOT started Fastify instance.
- * SIDE EFFECTS: None — call server.listen() to start.
+ * SIDE EFFECTS: If LOG_FILE is set, creates log directory and opens file stream.
  *
  * @example
  * ```typescript
@@ -78,17 +132,7 @@ export async function buildServer(options: ServerOptions) {
   const { pool, logLevel = 'info' } = options;
 
   const server = Fastify({
-    logger: {
-      level: logLevel,
-      /* GOV-006 §6.1: Structured JSON logging via pino */
-      formatters: {
-        level: (label: string) => ({ level: label.toUpperCase() }),
-      },
-      timestamp: () => `,"timestamp":"${new Date().toISOString()}"`,
-      base: {
-        service: process.env['SERVICE_NAME'] ?? 'lexflow-trust',
-      },
-    },
+    logger: buildLoggerConfig(logLevel),
   });
 
   /* Decorate the instance with the DB pool so routes can access it */
