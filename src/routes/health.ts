@@ -27,8 +27,9 @@ const START_TIME_MS = Date.now();
  * # → { "status": "ok", "uptimeMs": 12345, "dbConnected": true }
  * ```
  */
+// eslint-disable-next-line @typescript-eslint/require-await -- Fastify route plugin registration requires async
 export default async function healthRoute(fastify: FastifyInstance): Promise<void> {
-  fastify.get('/health', async (_request, _reply) => {
+  fastify.get('/health', async () => {
     const uptimeMs = Date.now() - START_TIME_MS;
 
     /* Check DB connectivity — returns false on any error, never throws */

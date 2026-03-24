@@ -35,6 +35,7 @@ declare module 'fastify' {
  * POSTCONDITION: `request.correlationId` is always a non-empty string.
  * SIDE EFFECTS: Sets `X-Correlation-ID` response header.
  */
+// eslint-disable-next-line @typescript-eslint/require-await -- Fastify plugin registration requires async
 async function correlationIdPlugin(fastify: FastifyInstance): Promise<void> {
   fastify.decorateRequest('correlationId', '');
 

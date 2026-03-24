@@ -59,10 +59,11 @@ function buildErrorResponse(
  * BLAST RADIUS: All API consumers receive non-CON-002 error responses.
  * MITIGATION: This plugin MUST be registered before any route plugins.
  */
+// eslint-disable-next-line @typescript-eslint/require-await -- Fastify plugin registration requires async
 async function errorHandlerPlugin(fastify: FastifyInstance): Promise<void> {
   fastify.setErrorHandler(
     (error: Error, request: FastifyRequest, reply: FastifyReply) => {
-      const correlationId = request.correlationId ?? 'unknown';
+      const correlationId = request.correlationId;
 
       /* Branch: Known application error with structured context */
       if (error instanceof ApplicationError) {
