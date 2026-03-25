@@ -3,7 +3,7 @@
 # restore.sh — LexFlow Database Restore Script
 # ============================================================================
 #
-# Restores a PostgreSQL database from a backup file.
+# Restores a PostgreSQL database from a backup file via Docker exec.
 # Supports both gzipped (.sql.gz) and plain SQL (.sql) backups.
 #
 # USAGE:
@@ -11,7 +11,7 @@
 #
 # EXAMPLES:
 #   ./scripts/restore.sh /var/backups/lexflow/lexflow_trust_20260324_020000.sql.gz
-#   ./scripts/restore.sh /var/backups/lexflow/predeploy_trust_20260324.sql.gz lexflow_trust
+#   ./scripts/restore.sh /var/backups/lexflow/lexflow_web_20260324.sql.gz lexflow_web
 #
 # WARNING: This script drops and recreates the target database!
 #
@@ -19,6 +19,11 @@
 # ============================================================================
 
 set -euo pipefail
+
+# ── Constants ───────────────────────────────────────────────────────────────
+
+readonly PG_CONTAINER="lexflow-postgres"
+readonly PG_USER="lexflow"
 
 # ── Argument Parsing ────────────────────────────────────────────────────────
 
@@ -39,26 +44,32 @@ readonly BACKUP_FILE="$1"
 if [[ $# -ge 2 ]]; then
   readonly DB_NAME="$2"
 else
-  # Extract DB name from filename: lexflow_trust_20260324... → lexflow_trust
-  # Handle predeploy_trust_... → lexflow_trust
+  # Extract DB name: lexflow_trust_20260324... → lexflow_trust
   BASENAME=$(basename "${BACKUP_FILE}" | sed 's/\.sql\.gz$//' | sed 's/\.sql$//')
   if [[ "${BASENAME}" == predeploy_trust_* ]]; then
     readonly DB_NAME="lexflow_trust"
-  elif [[ "${BASENAME}" == predeploy_main_* ]]; then
-    readonly DB_NAME="lexflow_main"
+  elif [[ "${BASENAME}" == predeploy_web_* ]] || [[ "${BASENAME}" == predeploy_main_* ]]; then
+    readonly DB_NAME="lexflow_web"
   else
     readonly DB_NAME=$(echo "${BASENAME}" | sed 's/_[0-9]\{8\}.*//')
   fi
 fi
 
-# ── Validation ──────────────────────────────────────────────────────────────
+# ── Functions ───────────────────────────────────────────────────────────────
 
 log() {
   echo "[$(date --iso-8601=seconds)] $1"
 }
 
+# ── Validation ──────────────────────────────────────────────────────────────
+
 if [[ ! -f "${BACKUP_FILE}" ]]; then
   log "ERROR: Backup file not found: ${BACKUP_FILE}"
+  exit 1
+fi
+
+if ! docker inspect "${PG_CONTAINER}" >/dev/null 2>&1; then
+  log "ERROR: Container '${PG_CONTAINER}' not found. Is Docker Compose running?"
   exit 1
 fi
 
@@ -84,17 +95,19 @@ fi
 # ── Restore ─────────────────────────────────────────────────────────────────
 
 log "Terminating existing connections to ${DB_NAME}..."
-psql -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${DB_NAME}' AND pid <> pg_backend_pid();" 2>/dev/null || true
+docker exec "${PG_CONTAINER}" psql -U "${PG_USER}" -d postgres \
+  -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${DB_NAME}' AND pid <> pg_backend_pid();" \
+  2>/dev/null || true
 
 log "Dropping and recreating ${DB_NAME}..."
-dropdb --if-exists "${DB_NAME}"
-createdb "${DB_NAME}"
+docker exec "${PG_CONTAINER}" dropdb -U "${PG_USER}" --if-exists "${DB_NAME}"
+docker exec "${PG_CONTAINER}" createdb -U "${PG_USER}" "${DB_NAME}"
 
 log "Restoring from backup..."
 if [[ "${BACKUP_FILE}" == *.gz ]]; then
-  gunzip -c "${BACKUP_FILE}" | psql -q "${DB_NAME}"
+  gunzip -c "${BACKUP_FILE}" | docker exec -i "${PG_CONTAINER}" psql -U "${PG_USER}" -q "${DB_NAME}"
 else
-  psql -q "${DB_NAME}" < "${BACKUP_FILE}"
+  docker exec -i "${PG_CONTAINER}" psql -U "${PG_USER}" -q "${DB_NAME}" < "${BACKUP_FILE}"
 fi
 
 # ── Verification ────────────────────────────────────────────────────────────
@@ -102,14 +115,14 @@ fi
 log "Verifying restore..."
 
 if [[ "${DB_NAME}" == "lexflow_trust" ]]; then
-  ACCOUNTS=$(psql -qt "${DB_NAME}" -c "SELECT count(*) FROM trust_accounts;" 2>/dev/null | tr -d ' ' || echo "?")
-  LEDGERS=$(psql -qt "${DB_NAME}" -c "SELECT count(*) FROM client_ledgers;" 2>/dev/null | tr -d ' ' || echo "?")
-  ENTRIES=$(psql -qt "${DB_NAME}" -c "SELECT count(*) FROM journal_entries;" 2>/dev/null | tr -d ' ' || echo "?")
+  ACCOUNTS=$(docker exec "${PG_CONTAINER}" psql -U "${PG_USER}" -qt "${DB_NAME}" -c "SELECT count(*) FROM trust_accounts;" 2>/dev/null | tr -d ' ' || echo "?")
+  LEDGERS=$(docker exec "${PG_CONTAINER}" psql -U "${PG_USER}" -qt "${DB_NAME}" -c "SELECT count(*) FROM client_ledgers;" 2>/dev/null | tr -d ' ' || echo "?")
+  ENTRIES=$(docker exec "${PG_CONTAINER}" psql -U "${PG_USER}" -qt "${DB_NAME}" -c "SELECT count(*) FROM journal_entries;" 2>/dev/null | tr -d ' ' || echo "?")
   log "  Trust accounts: ${ACCOUNTS}"
   log "  Client ledgers: ${LEDGERS}"
   log "  Journal entries: ${ENTRIES}"
 else
-  TABLE_COUNT=$(psql -qt "${DB_NAME}" -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null | tr -d ' ' || echo "?")
+  TABLE_COUNT=$(docker exec "${PG_CONTAINER}" psql -U "${PG_USER}" -qt "${DB_NAME}" -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null | tr -d ' ' || echo "?")
   log "  Tables restored: ${TABLE_COUNT}"
 fi
 
