@@ -3,7 +3,7 @@
 # backup.sh — LexFlow PostgreSQL Backup Script
 # ============================================================================
 #
-# Creates compressed pg_dump backups for both databases.
+# Creates compressed pg_dump backups for both databases via Docker exec.
 # Designed to be run via cron daily. Rotates backups older than 7 days.
 #
 # USAGE:
@@ -23,8 +23,9 @@ set -euo pipefail
 
 readonly BACKUP_DIR="/var/backups/lexflow"
 readonly RETENTION_DAYS=7
-readonly DATABASES=("${@:-lexflow_trust lexflow_main}")
 readonly TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+readonly PG_CONTAINER="lexflow-postgres"
+readonly PG_USER="lexflow"
 
 # ── Functions ───────────────────────────────────────────────────────────────
 
@@ -36,13 +37,20 @@ error() {
   echo "[$(date --iso-8601=seconds)] ERROR: $1" >&2
 }
 
+check_container() {
+  if ! docker inspect "${PG_CONTAINER}" >/dev/null 2>&1; then
+    error "Container '${PG_CONTAINER}' not found. Is Docker Compose running?"
+    exit 1
+  fi
+}
+
 backup_database() {
   local db_name="$1"
   local backup_file="${BACKUP_DIR}/${db_name}_${TIMESTAMP}.sql.gz"
 
   log "Backing up ${db_name}..."
 
-  if pg_dump "${db_name}" | gzip > "${backup_file}"; then
+  if docker exec "${PG_CONTAINER}" pg_dump -U "${PG_USER}" "${db_name}" | gzip > "${backup_file}"; then
     local size
     size=$(du -h "${backup_file}" | cut -f1)
     log "  ✓ ${db_name} → ${backup_file} (${size})"
@@ -74,11 +82,14 @@ log "╚════════════════════════
 # Ensure backup directory exists
 mkdir -p "${BACKUP_DIR}"
 
+# Verify container is running
+check_container
+
 # Parse databases argument
 if [[ $# -gt 0 ]]; then
   dbs=("$@")
 else
-  dbs=("lexflow_trust" "lexflow_main")
+  dbs=("lexflow_trust" "lexflow_web")
 fi
 
 # Backup each database
